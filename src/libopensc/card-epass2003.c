@@ -184,7 +184,7 @@ static const struct sc_card_error epass2003_errors[] = {
 typedef struct sec_attr_to_acl_entries {
 	unsigned int file_type;		/* file->type */
 	unsigned int file_ef_structure;	/* file->ef_structure */
-	int indx;			/* index in  epass2003 iversion of sec_attr */
+	int index;			/* index in  epass2003 iversion of sec_attr */
 	/* use the follow for sc_file_add_entry */
 	int op;				/* SC_AC_OP_* */
 } sec_attr_to_acl_entries_t;
@@ -2009,7 +2009,7 @@ epass2003_select_path(struct sc_card *card, const u8 pathbuf[16], const size_t l
 	u8 n_pathbuf[SC_MAX_PATH_SIZE];
 	const u8 *path = pathbuf;
 	size_t pathlen = len;
-	int bMatch = -1;
+	size_t bMatch = 0;
 	unsigned int i;
 	int r;
 
@@ -2034,7 +2034,6 @@ epass2003_select_path(struct sc_card *card, const u8 pathbuf[16], const size_t l
 			&& card->cache.current_path.type == SC_PATH_TYPE_PATH
 			&& card->cache.current_path.len >= 2
 			&& card->cache.current_path.len <= pathlen) {
-		bMatch = 0;
 		for (i = 0; i < card->cache.current_path.len; i += 2)
 			if (card->cache.current_path.value[i] == path[i]
 					&& card->cache.current_path.value[i + 1] == path[i + 1])
@@ -2331,7 +2330,7 @@ acl_to_ac_byte(struct sc_card *card, const struct sc_acl_entry *e)
 
 /* Use epass2003 sec_attr to add acl entries */
 int
-sec_attr_to_entry(struct sc_card *card, sc_file_t *file, int indx)
+sec_attr_to_entry(struct sc_card *card, sc_file_t *file, int index)
 {
 	int i;
 	int found = 0;
@@ -2341,7 +2340,7 @@ sec_attr_to_entry(struct sc_card *card, sc_file_t *file, int indx)
 
 	SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
 
-	switch (file->sec_attr[indx]) {
+	switch (file->sec_attr[index]) {
 	case (EPASS2003_AC_MAC_NOLESS | EPASS2003_AC_EVERYONE):
 		method = SC_AC_NONE;
 		keyref = SC_AC_KEY_REF_NONE;
@@ -2351,7 +2350,7 @@ sec_attr_to_entry(struct sc_card *card, sc_file_t *file, int indx)
 		keyref = 1;
 		break;
 	default:
-		sc_log(card->ctx, "Unknown value 0x%2.2x in file->sec_attr[%d]", file->sec_attr[indx], indx);
+		sc_log(card->ctx, "Unknown value 0x%2.2x in file->sec_attr[%d]", file->sec_attr[index], index);
 		method = SC_AC_NEVER;
 		keyref = SC_AC_KEY_REF_NONE;
 		break;
@@ -2360,7 +2359,7 @@ sec_attr_to_entry(struct sc_card *card, sc_file_t *file, int indx)
 	for (i = 0; i < (int)(sizeof(sec_attr_to_acl_entry) / sizeof(sec_attr_to_acl_entries_t)); i++) {
 		const sec_attr_to_acl_entries_t *e = &sec_attr_to_acl_entry[i];
 
-		if (indx == e->indx && file->type == e->file_type
+		if (index == e->index && file->type == e->file_type
 				&& file->ef_structure == e->file_ef_structure) {
 				/* may add multiple entries */
 			sc_file_add_acl_entry(file, e->op, method, keyref);
@@ -3046,11 +3045,14 @@ epass2003_erase_card(struct sc_card *card)
 {
 	static const unsigned char install_magic_pin[26] = {
 		/* compare install_secret_key */
-		0x06,0x01,0x10,0x16, 0x16,0x16,0x00,0x0f, 0xff,0x66,
-		0x31,0x32,0x33,0x34, 0x35,0x36,0x37,0x38,
-		0x31,0x32,0x33,0x34, 0x35,0x36,0x37,0x38,
+			0x06, 0x01, 0x10, 0x16, 0x16, 0x16, 0x00, 0x0f, 0xff, 0x66,
+			0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38,
+			0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38,
 	};
-	static const unsigned char magic_pin[16] = "1234567812345678";
+	static const unsigned char magic_pin[16] = {
+			0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38,
+			0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38,
+	};
 	static const unsigned char mf_path[2] = { 0x3f, 0x00 };
 	sc_apdu_t apdu;
 	int r;

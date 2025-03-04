@@ -228,6 +228,8 @@ extern "C" {
 
 #define MAX_FILE_SIZE 65535
 
+#define ED448_KEY_SIZE_BYTES 57U
+
 struct sc_supported_algo_info {
 	unsigned int reference;
 	unsigned int mechanism;
@@ -281,14 +283,20 @@ struct sc_pbes2_params {
 };
 
 /*
+ * PKCS11 2.3 Elliptic Curve lists mechanisms that use CKA_EC_PARAMS
+ * which implies the type of key and size needed in the OID
  * The ecParameters can be presented as
  * - name of curve;
  * - OID of named curve;
  * - implicit parameters.
+ * - printable string for non standard OIDS - added in pkcs11 3.0
  *
  * type - type(choice) of 'EC domain parameters' as it present in CKA_EC_PARAMS (PKCS#11).
-          Recommended value '1' -- namedCurve.
+ *	Recommended value '1' -- namedCurve.
  * field_length - EC key size in bits.
+ * key_type - 0 implies SC_ALGORITHM_EC, SC_ALGORITHM_EDDSA or SC_ALGORITHM_XEDDSA
+ *	Not actually part of CKA_EC_PARAMS - used in OpenSC to differentiate key types that use ec_params
+ *	will be set by sc_pkcs15_fix_ec_parameters
  */
 struct sc_ec_parameters {
 	char *named_curve;
@@ -297,6 +305,7 @@ struct sc_ec_parameters {
 
 	int type;
 	size_t field_length;
+	unsigned int key_type;
 };
 
 typedef struct sc_algorithm_info {
@@ -1647,6 +1656,11 @@ const u8 *sc_compacttlv_find_tag(const u8 *buf, size_t len, u8 tag, size_t *outl
  */
 void sc_remote_data_init(struct sc_remote_data *rdata);
 
+/**
+ * Clear ec_params
+ * @ecp
+ */
+void sc_clear_ec_params(struct sc_ec_parameters *);
 
 /**
  * Copy and allocate if needed EC parameters data

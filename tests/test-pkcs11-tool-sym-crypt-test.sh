@@ -1,6 +1,7 @@
 #!/bin/bash
+SOURCE_PATH=${SOURCE_PATH:-..}
 
-source common.sh
+source $SOURCE_PATH/tests/common.sh
 
 echo "======================================================="
 echo "Setup SoftHSM"
@@ -179,6 +180,26 @@ $PKCS11_TOOL --module="$P11LIB" --pin "$PIN" --decrypt --id "$ID3" -m AES-GCM --
 assert $? "Fail/pkcs11-tool decrypt"
 cmp gcm_vector_plain.data gcm_test_plain.data >/dev/null 2>&1
 assert $? "Fail, AES-GCM - wrong decrypt"
+
+echo "======================================================="
+echo " AES-CTR"
+echo " OpenSSL encrypt, pkcs11-tool decrypt"
+echo " pkcs11-tool encrypt, compare to openssl encrypt"
+echo "======================================================="
+
+openssl enc -aes-128-ctr -nopad -in aes_plain.data -out aes_ciphertext_openssl.data -iv "${VECTOR}" -K "70707070707070707070707070707070"
+assert $? "Fail/OpenSSL"
+$PKCS11_TOOL --module="$P11LIB" --pin "$PIN" --decrypt --id "$ID2" -m AES-CTR --iv "${VECTOR}" \
+	--input-file aes_ciphertext_openssl.data --output-file aes_plain_test.data 2>/dev/null
+assert $? "Fail/pkcs11-tool decrypt"
+cmp aes_plain.data aes_plain_test.data >/dev/null 2>/dev/null
+assert $? "Fail, AES-CTR - wrong decrypt"
+
+$PKCS11_TOOL --module="$P11LIB" --pin "$PIN" --encrypt --id "$ID2" -m AES-CTR --iv "${VECTOR}" \
+	--input-file aes_plain.data --output-file aes_ciphertext_pkcs11.data 2>/dev/null
+assert $? "Fail/pkcs11-tool encrypt"
+cmp  aes_ciphertext_pkcs11.data aes_ciphertext_openssl.data >/dev/null 2>/dev/null
+assert $? "Fail, AES-CTR - wrong encrypt"
 
 echo "======================================================="
 echo "Cleanup"

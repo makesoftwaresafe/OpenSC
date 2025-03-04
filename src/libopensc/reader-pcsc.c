@@ -644,14 +644,6 @@ static int pcsc_connect(sc_reader_t *reader)
 		rv = priv->gpriv->SCardConnect(priv->gpriv->pcsc_ctx, reader->name,
 				priv->gpriv->connect_exclusive ? SCARD_SHARE_EXCLUSIVE : SCARD_SHARE_SHARED,
 				protocol, &card_handle, &active_proto);
-#ifdef __APPLE__
-		if (rv == (LONG)SCARD_E_SHARING_VIOLATION) {
-			sleep(1); /* Try again to compete with Tokend probes */
-			rv = priv->gpriv->SCardConnect(priv->gpriv->pcsc_ctx, reader->name,
-					priv->gpriv->connect_exclusive ? SCARD_SHARE_EXCLUSIVE : SCARD_SHARE_SHARED,
-					protocol, &card_handle, &active_proto);
-		}
-#endif
 		if (rv != SCARD_S_SUCCESS) {
 			PCSC_TRACE(reader, "SCardConnect failed", rv);
 			return pcsc_to_opensc_error(rv);
@@ -1654,6 +1646,11 @@ static int pcsc_wait_for_event(sc_context_t *ctx, unsigned int event_mask, sc_re
 #else
 			rgReaderStates[num_watch].szReader = "\\\\?PnP?\\Notification";
 			rgReaderStates[num_watch].dwCurrentState = SCARD_STATE_UNAWARE;
+#ifdef _WIN32
+			/* Windows expects number of readers in HiWord of dwCurrentState.
+			 * See https://stackoverflow.com/questions/16370909. */
+			rgReaderStates[num_watch].dwCurrentState |= (num_watch << 16);
+#endif
 			rgReaderStates[num_watch].dwEventState = SCARD_STATE_UNAWARE;
 			num_watch++;
 			sc_log(ctx, "Trying to detect new readers");
@@ -1720,6 +1717,13 @@ static int pcsc_wait_for_event(sc_context_t *ctx, unsigned int event_mask, sc_re
 			prev_state = rsp->dwCurrentState;
 			state = rsp->dwEventState;
 			rsp->dwCurrentState = rsp->dwEventState;
+#ifdef _WIN32
+			if (!strcmp(rsp->szReader, "\\\\?PnP?\\Notification")) {
+				/* Windows expects number of readers in HiWord of dwCurrentState.
+				 * See https://stackoverflow.com/questions/16370909. */
+				rsp->dwCurrentState |= ((num_watch - 1) << 16);
+			}
+#endif
 			if (state & SCARD_STATE_CHANGED) {
 				/* check for hotplug events */
 				if (!strcmp(rsp->szReader, "\\\\?PnP?\\Notification")) {

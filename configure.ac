@@ -8,7 +8,7 @@ define([PRODUCT_BUGREPORT], [https://github.com/OpenSC/OpenSC/issues])
 define([PRODUCT_URL], [https://github.com/OpenSC/OpenSC])
 define([PACKAGE_VERSION_MAJOR], [0])
 define([PACKAGE_VERSION_MINOR], [26])
-define([PACKAGE_VERSION_FIX], [0])
+define([PACKAGE_VERSION_FIX], [1])
 define([PACKAGE_SUFFIX], [])
 
 define([VS_FF_LEGAL_COPYRIGHT], [OpenSC Project])
@@ -17,7 +17,6 @@ define([VS_FF_LEGAL_COMPANY_URL], [https://github.com/OpenSC])
 define([VS_FF_COMMENTS], [Provided under the terms of the GNU Lesser General Public License (LGPLv2.1+).])
 define([VS_FF_PRODUCT_NAME], [OpenSC smartcard framework])
 define([VS_FF_PRODUCT_UPDATES], [https://github.com/OpenSC/OpenSC/releases])
-define([VS_FF_PRODUCT_URL], [https://github.com/OpenSC/OpenSC])
 
 m4_sinclude(m4/version.m4.ci)
 
@@ -40,7 +39,6 @@ OPENSC_VS_FF_COMPANY_URL="VS_FF_LEGAL_COMPANY_URL"
 OPENSC_VS_FF_COMMENTS="VS_FF_COMMENTS"
 OPENSC_VS_FF_PRODUCT_NAME="VS_FF_PRODUCT_NAME"
 OPENSC_VS_FF_PRODUCT_UPDATES="VS_FF_PRODUCT_UPDATES"
-OPENSC_VS_FF_PRODUCT_URL="VS_FF_PRODUCT_URL"
 
 # LT Version numbers, remember to change them just *before* a release.
 #   (Code changed:                      REVISION++)
@@ -48,7 +46,7 @@ OPENSC_VS_FF_PRODUCT_URL="VS_FF_PRODUCT_URL"
 #   (Interfaces added:                  CURRENT++, REVISION=0)
 OPENSC_LT_CURRENT="12"
 OPENSC_LT_OLDEST="12"
-OPENSC_LT_REVISION="1"
+OPENSC_LT_REVISION="2"
 OPENSC_LT_AGE="$((${OPENSC_LT_CURRENT}-${OPENSC_LT_OLDEST}))"
 
 AC_CONFIG_SRCDIR([src/libopensc/sc.c])
@@ -84,7 +82,6 @@ fi
 
 dnl Check for some target-specific stuff
 test -z "${WIN32}" && WIN32="no"
-test -z "${CYGWIN}" && CYGWIN="no"
 
 case "${host}" in
 	*-*-solaris*)
@@ -97,17 +94,14 @@ case "${host}" in
 		WIN_LIBPREFIX="lib"
 	;;
 	*-cygwin*)
+		CPPFLAGS="${CPPFLAGS} -DWIN32_LEAN_AND_MEAN"
 		AC_MSG_CHECKING([cygwin mode to use])
-		CYGWIN="yes"
 		if test "${with_cygwin_native}" = "yes"; then
 			AC_MSG_RESULT([Using native win32])
-			CPPFLAGS="${CPPFLAGS} -DWIN32_LEAN_AND_MEAN"
-			#CFLAGS="${CFLAGS} -mno-cygwin" deprecated/removed flag
 			WIN32="yes"
 		else
 			AC_MSG_RESULT([Using cygwin])
 			WIN_LIBPREFIX="cyg"
-			AC_DEFINE([USE_CYGWIN], [1], [Define if you are on Cygwin])
 		fi
 	;;
 esac
@@ -1082,7 +1076,6 @@ AC_DEFINE_UNQUOTED([OPENSC_VS_FF_COMPANY_NAME], ["${OPENSC_VS_FF_COMPANY_NAME}"]
 AC_DEFINE_UNQUOTED([OPENSC_VS_FF_COMMENTS], ["${OPENSC_VS_FF_COMMENTS}"], [OpenSC version-info Comments])
 AC_DEFINE_UNQUOTED([OPENSC_VS_FF_PRODUCT_NAME], ["${OPENSC_VS_FF_PRODUCT_NAME}"], [OpenSC version-info ProductName])
 AC_DEFINE_UNQUOTED([OPENSC_VS_FF_PRODUCT_UPDATES], ["${OPENSC_VS_FF_PRODUCT_UPDATES}"], [OpenSC version-info UpdateURL])
-AC_DEFINE_UNQUOTED([OPENSC_VS_FF_PRODUCT_URL], ["${OPENSC_VS_FF_PRODUCT_URL}"], [OpenSC version-info ProductURL])
 AC_DEFINE_UNQUOTED([OPENSC_VS_FF_COMPANY_URL], ["${OPENSC_VS_FF_COMPANY_URL}"], [OpenSC version-info UpdateURL])
 
 pkcs11dir="\$(libdir)/pkcs11"
@@ -1099,7 +1092,6 @@ AC_SUBST([OPENSC_VS_FF_COMPANY_NAME])
 AC_SUBST([OPENSC_VS_FF_COMMENTS])
 AC_SUBST([OPENSC_VS_FF_PRODUCT_NAME])
 AC_SUBST([OPENSC_VS_FF_PRODUCT_UPDATES])
-AC_SUBST([OPENSC_VS_FF_PRODUCT_URL])
 AC_SUBST([OPENSC_VS_FF_COMPANY_URL])
 AC_SUBST([OPENSC_LT_CURRENT])
 AC_SUBST([OPENSC_LT_REVISION])
@@ -1141,7 +1133,6 @@ AM_CONDITIONAL([ENABLE_OPENCT], [test "${enable_openct}" = "yes"])
 AM_CONDITIONAL([ENABLE_DOC], [test "${enable_doc}" = "yes"])
 AM_CONDITIONAL([ENABLE_TESTS], [test "${enable_tests}" = "yes"])
 AM_CONDITIONAL([WIN32], [test "${WIN32}" = "yes"])
-AM_CONDITIONAL([CYGWIN], [test "${CYGWIN}" = "yes"])
 AM_CONDITIONAL([ENABLE_MINIDRIVER], [test "${enable_minidriver}" = "yes"])
 AM_CONDITIONAL([ENABLE_MINIDRIVER_SETUP_CUSTOMACTION], [test "${enable_minidriver_ca}" = "yes"])
 AM_CONDITIONAL([ENABLE_SM], [test "${enable_sm}" = "yes"])
@@ -1177,8 +1168,6 @@ AC_CONFIG_FILES([
 	src/libopensc/Makefile
 	src/sm/Makefile
 	src/pkcs11/Makefile
-	src/pkcs11/versioninfo-pkcs11.rc
-	src/pkcs11/versioninfo-pkcs11-spy.rc
 	src/pkcs11/opensc-pkcs11.pc
 	src/pkcs15init/Makefile
 	src/scconf/Makefile
@@ -1188,15 +1177,10 @@ AC_CONFIG_FILES([
 	src/tests/fuzzing/Makefile
 	src/tests/unittests/Makefile
 	src/tools/Makefile
-	src/tools/versioninfo-tools.rc
-	src/tools/versioninfo-opensc-notify.rc
 	src/smm/Makefile
 	src/minidriver/Makefile
-	src/minidriver/versioninfo-minidriver.rc
 	src/minidriver/opensc-minidriver.inf
 	win32/Makefile
-	win32/versioninfo.rc
-	win32/versioninfo-customactions.rc
 	win32/winconfig.h
 	win32/OpenSC.iss
 	win32/OpenSC.wxs
@@ -1225,7 +1209,7 @@ Company URL:             ${OPENSC_VS_FF_COMPANY_URL}
 Comments:                ${OPENSC_VS_FF_COMMENTS}
 Product name:            ${OPENSC_VS_FF_PRODUCT_NAME}
 Product updates:         ${OPENSC_VS_FF_PRODUCT_UPDATES}
-Product URL:             ${OPENSC_VS_FF_PRODUCT_URL}
+Product URL:             ${PACKAGE_URL}
 
 User binaries:           $(eval eval eval echo "${bindir}")
 Configuration files:     $(eval eval eval echo "${sysconfdir}")

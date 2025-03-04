@@ -3,7 +3,7 @@
  * card-default.c: Support for cards with no driver
  *
  * Copyright (C) 2001, 2002  Juha Yrjölä <juha.yrjola@iki.fi>
- * Copyright (C) 2005-2023  Douglas E. Engert <deengert@gmail.com>
+ * Copyright (C) 2005-2024  Douglas E. Engert <deengert@gmail.com>
  * Copyright (C) 2006, Identity Alliance, Thomas Harning <thomas.harning@identityalliance.com>
  * Copyright (C) 2007, EMC, Russell Larner <rlarner@rsa.com>
  *
@@ -39,7 +39,7 @@
 #endif
 
 #ifdef ENABLE_OPENSSL
-	/* openssl needed for card administration and SM */
+/* openssl needed for card administration and SM */
 #include <openssl/evp.h>
 #include <openssl/pem.h>
 #include <openssl/rand.h>
@@ -544,10 +544,13 @@ static const struct sc_atr_table piv_atrs[] = {
 static struct piv_supported_ec_curves {
 	struct sc_object_id oid;
 	size_t size;
+	unsigned int key_type;
 } ec_curves[] = {
-	{{{1, 2, 840, 10045, 3, 1, 7, -1}},     256}, /* secp256r1, nistp256, prime256v1, ansiX9p256r1 */
-	{{{1, 3, 132, 0, 34, -1}},              384}, /* secp384r1, nistp384, prime384v1, ansiX9p384r1 */
-	{{{-1}}, 0} /* This entry must not be touched. */
+		{{{1, 2, 840, 10045, 3, 1, 7, -1}}, 256, SC_ALGORITHM_EC	}, /* secp256r1, nistp256, prime256v1, ansiX9p256r1 */
+		{{{1, 3, 132, 0, 34, -1}},	   384, SC_ALGORITHM_EC    }, /* secp384r1, nistp384, prime384v1, ansiX9p384r1 */
+		{{{1, 3, 101, 112, -1}},		 255, SC_ALGORITHM_EDDSA }, /* RFC8410 OID equivalent to ed25519 */
+		{{{1, 3, 101, 110, -1}},		 255, SC_ALGORITHM_XEDDSA}, /* RFC8410 OID equivalent to curve25519 */
+		{{{-1}},			    0,   0		     }  /* This entry must not be touched. */
 };
 
 /* all have same AID */
@@ -573,6 +576,8 @@ static struct piv_aid piv_aids[] = {
 #define CI_NO_RSA2048			    0x00010000U /* does not have RSA 2048 */
 #define CI_NO_EC384			    0x00020000U /* does not have EC 384 */
 #define CI_NO_EC			    0x00040000U /* No EC at all */
+#define CI_RSA_4096			    0x00080000U /* Card supports rsa 4096 */
+#define CI_25519			    0x00100000U /* Card supports ED25519 and X25519 */
 
 /*
  * Flags in the piv_object:
@@ -604,143 +609,143 @@ struct piv_object {
 static const struct piv_object piv_objects[] = {
 	{ PIV_OBJ_CCC, "Card Capability Container",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.1.219.0", 3, "\x5F\xC1\x07", "\xDB\x00", PIV_OBJECT_NEEDS_VCI},
+			"2.16.840.1.101.3.7.1.219.0", 3, {0x5F, 0xC1, 0x07}, {0xDB, 0x00}, PIV_OBJECT_NEEDS_VCI},
 	{ PIV_OBJ_CHUI, "Card Holder Unique Identifier",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.48.0", 3, "\x5F\xC1\x02", "\x30\x00", 0},
+			"2.16.840.1.101.3.7.2.48.0", 3, {0x5F, 0xC1, 0x02}, {0x30, 0x00}, 0},
 	{ PIV_OBJ_X509_PIV_AUTH, "X.509 Certificate for PIV Authentication",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.1.1", 3, "\x5F\xC1\x05", "\x01\x01", PIV_OBJECT_TYPE_CERT | PIV_OBJECT_NEEDS_VCI} ,
+			"2.16.840.1.101.3.7.2.1.1", 3, {0x5F, 0xC1, 0x05}, {0x01, 0x01}, PIV_OBJECT_TYPE_CERT | PIV_OBJECT_NEEDS_VCI} ,
 	{ PIV_OBJ_CHF, "Card Holder Fingerprints",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.96.16", 3, "\x5F\xC1\x03", "\x60\x10", PIV_OBJECT_NEEDS_PIN | PIV_OBJECT_NEEDS_VCI},
+			"2.16.840.1.101.3.7.2.96.16", 3, {0x5F, 0xC1, 0x03}, {0x60, 0x10}, PIV_OBJECT_NEEDS_PIN | PIV_OBJECT_NEEDS_VCI},
 	{ PIV_OBJ_PI, "Printed Information",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.48.1", 3, "\x5F\xC1\x09", "\x30\x01", PIV_OBJECT_NEEDS_PIN | PIV_OBJECT_NEEDS_VCI},
+			"2.16.840.1.101.3.7.2.48.1", 3, {0x5F, 0xC1, 0x09}, {0x30, 0x01}, PIV_OBJECT_NEEDS_PIN | PIV_OBJECT_NEEDS_VCI},
 	{ PIV_OBJ_CHFI, "Cardholder Facial Images",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.96.48", 3, "\x5F\xC1\x08", "\x60\x30", PIV_OBJECT_NEEDS_PIN | PIV_OBJECT_NEEDS_VCI},
+			"2.16.840.1.101.3.7.2.96.48", 3, {0x5F, 0xC1, 0x08}, {0x60, 0x30}, PIV_OBJECT_NEEDS_PIN | PIV_OBJECT_NEEDS_VCI},
 	{ PIV_OBJ_X509_DS, "X.509 Certificate for Digital Signature",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.1.0", 3, "\x5F\xC1\x0A", "\x01\x00", PIV_OBJECT_TYPE_CERT | PIV_OBJECT_NEEDS_VCI},
+			"2.16.840.1.101.3.7.2.1.0", 3, {0x5F, 0xC1, 0x0A}, {0x01, 0x00}, PIV_OBJECT_TYPE_CERT | PIV_OBJECT_NEEDS_VCI},
 	{ PIV_OBJ_X509_KM, "X.509 Certificate for Key Management",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.1.2", 3, "\x5F\xC1\x0B", "\x01\x02", PIV_OBJECT_TYPE_CERT},
+			"2.16.840.1.101.3.7.2.1.2", 3, {0x5F, 0xC1, 0x0B}, {0x01, 0x02}, PIV_OBJECT_TYPE_CERT},
 	{ PIV_OBJ_X509_CARD_AUTH, "X.509 Certificate for Card Authentication",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.5.0", 3, "\x5F\xC1\x01", "\x05\x00", PIV_OBJECT_TYPE_CERT},
+			"2.16.840.1.101.3.7.2.5.0", 3, {0x5F, 0xC1, 0x01}, {0x05, 0x00}, PIV_OBJECT_TYPE_CERT},
 	{ PIV_OBJ_SEC_OBJ, "Security Object",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.144.0", 3, "\x5F\xC1\x06", "\x90\x00", PIV_OBJECT_NEEDS_VCI},
+			"2.16.840.1.101.3.7.2.144.0", 3, {0x5F, 0xC1, 0x06}, {0x90, 0x00}, PIV_OBJECT_NEEDS_VCI},
 	{ PIV_OBJ_DISCOVERY, "Discovery Object",
 			SC_ASN1_APP | SC_ASN1_CONS | 0x1E,
-			"2.16.840.1.101.3.7.2.96.80", 1, "\x7E", "\x60\x50", 0},
+			"2.16.840.1.101.3.7.2.96.80", 1, {0x7E}, {0x60, 0x50}, 0},
 	{ PIV_OBJ_HISTORY, "Key History Object",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.96.96", 3, "\x5F\xC1\x0C", "\x60\x60", PIV_OBJECT_NEEDS_VCI},
+			"2.16.840.1.101.3.7.2.96.96", 3, {0x5F, 0xC1, 0x0C}, {0x60, 0x60}, PIV_OBJECT_NEEDS_VCI},
 
 /* 800-73-3, 21 new objects, 20 history certificates */
 	{ PIV_OBJ_RETIRED_X509_1, "Retired X.509 Certificate for Key Management 1",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.16.1", 3, "\x5F\xC1\x0D", "\x10\x01",
+			"2.16.840.1.101.3.7.2.16.1", 3, {0x5F, 0xC1, 0x0D}, {0x10, 0x01},
 			PIV_OBJECT_NOT_PRESENT|PIV_OBJECT_TYPE_CERT | PIV_OBJECT_NEEDS_VCI},
 	{ PIV_OBJ_RETIRED_X509_2, "Retired X.509 Certificate for Key Management 2",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.16.2", 3, "\x5F\xC1\x0E", "\x10\x02",
+			"2.16.840.1.101.3.7.2.16.2", 3, {0x5F, 0xC1, 0x0E}, {0x10, 0x02},
 			PIV_OBJECT_NOT_PRESENT|PIV_OBJECT_TYPE_CERT | PIV_OBJECT_NEEDS_VCI},
 	{ PIV_OBJ_RETIRED_X509_3, "Retired X.509 Certificate for Key Management 3",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.16.3", 3, "\x5F\xC1\x0F", "\x10\x03",
+			"2.16.840.1.101.3.7.2.16.3", 3, {0x5F, 0xC1, 0x0F}, {0x10, 0x03},
 			PIV_OBJECT_NOT_PRESENT|PIV_OBJECT_TYPE_CERT | PIV_OBJECT_NEEDS_VCI},
 	{ PIV_OBJ_RETIRED_X509_4, "Retired X.509 Certificate for Key Management 4",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.16.4", 3, "\x5F\xC1\x10", "\x10\x04",
+			"2.16.840.1.101.3.7.2.16.4", 3, {0x5F, 0xC1, 0x10}, {0x10, 0x04},
 			PIV_OBJECT_NOT_PRESENT|PIV_OBJECT_TYPE_CERT | PIV_OBJECT_NEEDS_VCI},
 	{ PIV_OBJ_RETIRED_X509_5, "Retired X.509 Certificate for Key Management 5",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.16.5", 3, "\x5F\xC1\x11", "\x10\x05",
+			"2.16.840.1.101.3.7.2.16.5", 3, {0x5F, 0xC1, 0x11}, {0x10, 0x05},
 			PIV_OBJECT_NOT_PRESENT|PIV_OBJECT_TYPE_CERT | PIV_OBJECT_NEEDS_VCI},
 	{ PIV_OBJ_RETIRED_X509_6, "Retired X.509 Certificate for Key Management 6",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.16.6", 3, "\x5F\xC1\x12", "\x10\x06",
+			"2.16.840.1.101.3.7.2.16.6", 3, {0x5F, 0xC1, 0x12}, {0x10, 0x06},
 			PIV_OBJECT_NOT_PRESENT|PIV_OBJECT_TYPE_CERT | PIV_OBJECT_NEEDS_VCI},
 	{ PIV_OBJ_RETIRED_X509_7, "Retired X.509 Certificate for Key Management 7",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.16.7", 3, "\x5F\xC1\x13", "\x10\x07",
+			"2.16.840.1.101.3.7.2.16.7", 3, {0x5F, 0xC1, 0x13}, {0x10, 0x07},
 			PIV_OBJECT_NOT_PRESENT|PIV_OBJECT_TYPE_CERT | PIV_OBJECT_NEEDS_VCI},
 	{ PIV_OBJ_RETIRED_X509_8, "Retired X.509 Certificate for Key Management 8",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.16.8", 3, "\x5F\xC1\x14", "\x10\x08",
+			"2.16.840.1.101.3.7.2.16.8", 3, {0x5F, 0xC1, 0x14}, {0x10, 0x08},
 			PIV_OBJECT_NOT_PRESENT|PIV_OBJECT_TYPE_CERT | PIV_OBJECT_NEEDS_VCI},
 	{ PIV_OBJ_RETIRED_X509_9, "Retired X.509 Certificate for Key Management 9",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.16.9", 3, "\x5F\xC1\x15", "\x10\x09",
+			"2.16.840.1.101.3.7.2.16.9", 3, {0x5F, 0xC1, 0x15}, {0x10, 0x09},
 			PIV_OBJECT_NOT_PRESENT|PIV_OBJECT_TYPE_CERT | PIV_OBJECT_NEEDS_VCI},
 	{ PIV_OBJ_RETIRED_X509_10, "Retired X.509 Certificate for Key Management 10",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.16.10", 3, "\x5F\xC1\x16", "\x10\x0A",
+			"2.16.840.1.101.3.7.2.16.10", 3, {0x5F, 0xC1, 0x16}, {0x10, 0x0A},
 			PIV_OBJECT_NOT_PRESENT|PIV_OBJECT_TYPE_CERT | PIV_OBJECT_NEEDS_VCI},
 	{ PIV_OBJ_RETIRED_X509_11, "Retired X.509 Certificate for Key Management 11",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.16.11", 3, "\x5F\xC1\x17", "\x10\x0B",
+			"2.16.840.1.101.3.7.2.16.11", 3, {0x5F, 0xC1, 0x17}, {0x10, 0x0B},
 			PIV_OBJECT_NOT_PRESENT|PIV_OBJECT_TYPE_CERT | PIV_OBJECT_NEEDS_VCI},
 	{ PIV_OBJ_RETIRED_X509_12, "Retired X.509 Certificate for Key Management 12",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.16.12", 3, "\x5F\xC1\x18", "\x10\x0C",
+			"2.16.840.1.101.3.7.2.16.12", 3, {0x5F, 0xC1, 0x18}, {0x10, 0x0C},
 			PIV_OBJECT_NOT_PRESENT|PIV_OBJECT_TYPE_CERT | PIV_OBJECT_NEEDS_VCI},
 	{ PIV_OBJ_RETIRED_X509_13, "Retired X.509 Certificate for Key Management 13",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.16.13", 3, "\x5F\xC1\x19", "\x10\x0D",
+			"2.16.840.1.101.3.7.2.16.13", 3, {0x5F, 0xC1, 0x19}, {0x10, 0x0D},
 			PIV_OBJECT_NOT_PRESENT|PIV_OBJECT_TYPE_CERT | PIV_OBJECT_NEEDS_VCI},
 	{ PIV_OBJ_RETIRED_X509_14, "Retired X.509 Certificate for Key Management 14",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.16.14", 3, "\x5F\xC1\x1A", "\x10\x0E",
+			"2.16.840.1.101.3.7.2.16.14", 3, {0x5F, 0xC1, 0x1A}, {0x10, 0x0E},
 			PIV_OBJECT_NOT_PRESENT|PIV_OBJECT_TYPE_CERT | PIV_OBJECT_NEEDS_VCI},
 	{ PIV_OBJ_RETIRED_X509_15, "Retired X.509 Certificate for Key Management 15",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.16.15", 3, "\x5F\xC1\x1B", "\x10\x0F",
+			"2.16.840.1.101.3.7.2.16.15", 3, {0x5F, 0xC1, 0x1B}, {0x10, 0x0F},
 			PIV_OBJECT_NOT_PRESENT|PIV_OBJECT_TYPE_CERT | PIV_OBJECT_NEEDS_VCI},
 	{ PIV_OBJ_RETIRED_X509_16, "Retired X.509 Certificate for Key Management 16",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.16.16", 3, "\x5F\xC1\x1C", "\x10\x10",
+			"2.16.840.1.101.3.7.2.16.16", 3, {0x5F, 0xC1, 0x1C}, {0x10, 0x10},
 			PIV_OBJECT_NOT_PRESENT|PIV_OBJECT_TYPE_CERT | PIV_OBJECT_NEEDS_VCI},
 	{ PIV_OBJ_RETIRED_X509_17, "Retired X.509 Certificate for Key Management 17",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.16.17", 3, "\x5F\xC1\x1D", "\x10\x11",
+			"2.16.840.1.101.3.7.2.16.17", 3, {0x5F, 0xC1, 0x1D}, {0x10, 0x11},
 			PIV_OBJECT_NOT_PRESENT|PIV_OBJECT_TYPE_CERT | PIV_OBJECT_NEEDS_VCI},
 	{ PIV_OBJ_RETIRED_X509_18, "Retired X.509 Certificate for Key Management 18",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.16.18", 3, "\x5F\xC1\x1E", "\x10\x12",
+			"2.16.840.1.101.3.7.2.16.18", 3, {0x5F, 0xC1, 0x1E}, {0x10, 0x12},
 			PIV_OBJECT_NOT_PRESENT|PIV_OBJECT_TYPE_CERT | PIV_OBJECT_NEEDS_VCI},
 	{ PIV_OBJ_RETIRED_X509_19, "Retired X.509 Certificate for Key Management 19",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.16.19", 3, "\x5F\xC1\x1F", "\x10\x13",
+			"2.16.840.1.101.3.7.2.16.19", 3, {0x5F, 0xC1, 0x1F}, {0x10, 0x13},
 			PIV_OBJECT_NOT_PRESENT|PIV_OBJECT_TYPE_CERT | PIV_OBJECT_NEEDS_VCI},
 	{ PIV_OBJ_RETIRED_X509_20, "Retired X.509 Certificate for Key Management 20",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.16.20", 3, "\x5F\xC1\x20", "\x10\x14",
+			"2.16.840.1.101.3.7.2.16.20", 3, {0x5F, 0xC1, 0x20}, {0x10, 0x14},
 			PIV_OBJECT_NOT_PRESENT|PIV_OBJECT_TYPE_CERT | PIV_OBJECT_NEEDS_VCI},
 
 	{ PIV_OBJ_IRIS_IMAGE, "Cardholder Iris Images",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.16.21", 3, "\x5F\xC1\x21", "\x10\x15", PIV_OBJECT_NEEDS_PIN | PIV_OBJECT_NEEDS_VCI},
+			"2.16.840.1.101.3.7.2.16.21", 3, {0x5F, 0xC1, 0x21}, {0x10, 0x15}, PIV_OBJECT_NEEDS_PIN | PIV_OBJECT_NEEDS_VCI},
 
 /* 800-73-4, 3 new objects */
 	{ PIV_OBJ_BITGT, "Biometric Information Templates Group Template",
 			 SC_ASN1_APP | SC_ASN1_CONS | 0x1F61,
-			"2.16.840.1.101.3.7.2.16.22", 2, "\x7F\x61", "\x10\x16", 0},
+			"2.16.840.1.101.3.7.2.16.22", 2, {0x7F, 0x61}, {0x10, 0x16}, 0},
 	{ PIV_OBJ_SM_CERT_SIGNER, "Secure Messaging Certificate Signer",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.16.23", 3, "\x5F\xC1\x22", "\x10\x17",
+			"2.16.840.1.101.3.7.2.16.23", 3, {0x5F, 0xC1, 0x22}, {0x10, 0x17},
 			PIV_OBJECT_TYPE_CERT | PIV_OBJECT_TYPE_CVC},
 	{PIV_OBJ_PCRDCS, "Pairing Code Reference Data Container",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.16.24", 3, "\x5F\xC1\x23", "\x10\x18", PIV_OBJECT_NEEDS_PIN | PIV_OBJECT_NEEDS_VCI},
+			"2.16.840.1.101.3.7.2.16.24", 3, {0x5F, 0xC1, 0x23}, {0x10, 0x18}, PIV_OBJECT_NEEDS_PIN | PIV_OBJECT_NEEDS_VCI},
 
 /* following not standard , to be used by piv-tool only for testing */
 	{ PIV_OBJ_9B03, "3DES-ECB ADM",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.9999.3", 2, "\x9B\x03", "\x9B\x03", 0},
+			"2.16.840.1.101.3.7.2.9999.3", 2, {0x9B, 0x03}, {0x9B, 0x03}, 0},
 	/* Only used when signing a cert req, usually from engine
 	 * after piv-tool generated the key and saved the pub key
 	 * to a file. Note RSA key can be 1024, 2048 or 3072
@@ -748,77 +753,77 @@ static const struct piv_object piv_objects[] = {
 	 */
 	{ PIV_OBJ_9A06, "RSA 9A Pub key from last genkey",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.9999.20", 2, "\x9A\x06", "\x9A\x06", PIV_OBJECT_TYPE_PUBKEY},
+			"2.16.840.1.101.3.7.2.9999.20", 2, {0x9A, 0x06}, {0x9A, 0x06}, PIV_OBJECT_TYPE_PUBKEY},
 	{ PIV_OBJ_9C06, "Pub 9C key from last genkey",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.9999.21", 2, "\x9C\x06", "\x9C\x06", PIV_OBJECT_TYPE_PUBKEY},
+			"2.16.840.1.101.3.7.2.9999.21", 2, {0x9C, 0x06}, {0x9C, 0x06}, PIV_OBJECT_TYPE_PUBKEY},
 	{ PIV_OBJ_9D06, "Pub 9D key from last genkey",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.9999.22", 2, "\x9D\x06", "\x9D\x06", PIV_OBJECT_TYPE_PUBKEY},
+			"2.16.840.1.101.3.7.2.9999.22", 2, {0x9D, 0x06}, {0x9D, 0x06}, PIV_OBJECT_TYPE_PUBKEY},
 	{ PIV_OBJ_9E06, "Pub 9E key from last genkey",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.9999.23", 2, "\x9E\x06", "\x9E\x06", PIV_OBJECT_TYPE_PUBKEY},
+			"2.16.840.1.101.3.7.2.9999.23", 2, {0x9E, 0x06}, {0x9E, 0x06}, PIV_OBJECT_TYPE_PUBKEY},
 
 	{ PIV_OBJ_8206, "Pub 82 key ",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.9999.101", 2, "\x82\x06", "\x82\x06", PIV_OBJECT_TYPE_PUBKEY},
+			"2.16.840.1.101.3.7.2.9999.101", 2, {0x82, 0x06}, {0x82, 0x06}, PIV_OBJECT_TYPE_PUBKEY},
 	{ PIV_OBJ_8306, "Pub 83 key ",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.9999.102", 2, "\x83\x06", "\x83\x06", PIV_OBJECT_TYPE_PUBKEY},
+			"2.16.840.1.101.3.7.2.9999.102", 2, {0x83, 0x06}, {0x83, 0x06}, PIV_OBJECT_TYPE_PUBKEY},
 	{ PIV_OBJ_8406, "Pub 84 key ",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.9999.103", 2, "\x84\x06", "\x84\x06", PIV_OBJECT_TYPE_PUBKEY},
+			"2.16.840.1.101.3.7.2.9999.103", 2, {0x84, 0x06}, {0x84, 0x06}, PIV_OBJECT_TYPE_PUBKEY},
 	{ PIV_OBJ_8506, "Pub 85 key ",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.9999.104", 2, "\x85\x06", "\x85\x06", PIV_OBJECT_TYPE_PUBKEY},
+			"2.16.840.1.101.3.7.2.9999.104", 2, {0x85, 0x06}, {0x85, 0x06}, PIV_OBJECT_TYPE_PUBKEY},
 	{ PIV_OBJ_8606, "Pub 86 key ",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.9999.105", 2, "\x86\x06", "\x86\x06", PIV_OBJECT_TYPE_PUBKEY},
+			"2.16.840.1.101.3.7.2.9999.105", 2, {0x86, 0x06}, {0x86, 0x06}, PIV_OBJECT_TYPE_PUBKEY},
 	{ PIV_OBJ_8706, "Pub 87 key ",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.9999.106", 2, "\x87\x06", "\x87\x06", PIV_OBJECT_TYPE_PUBKEY},
+			"2.16.840.1.101.3.7.2.9999.106", 2, {0x87, 0x06}, {0x87, 0x06}, PIV_OBJECT_TYPE_PUBKEY},
 	{ PIV_OBJ_8806, "Pub 88 key ",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.9999.107", 2, "\x88\x06", "\x88\x06", PIV_OBJECT_TYPE_PUBKEY},
+			"2.16.840.1.101.3.7.2.9999.107", 2, {0x88, 0x06}, {0x88, 0x06}, PIV_OBJECT_TYPE_PUBKEY},
 	{ PIV_OBJ_8906, "Pub 89 key ",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.9999.108", 2, "\x89\x06", "\x89\x06", PIV_OBJECT_TYPE_PUBKEY},
+			"2.16.840.1.101.3.7.2.9999.108", 2, {0x89, 0x06}, {0x89, 0x06}, PIV_OBJECT_TYPE_PUBKEY},
 	{ PIV_OBJ_8A06, "Pub 8A key ",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.9999.109", 2, "\x8A\x06", "\x8A\x06", PIV_OBJECT_TYPE_PUBKEY},
+			"2.16.840.1.101.3.7.2.9999.109", 2, {0x8A, 0x06}, {0x8A, 0x06}, PIV_OBJECT_TYPE_PUBKEY},
 	{ PIV_OBJ_8B06, "Pub 8B key ",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.9999.110", 2, "\x8B\x06", "\x8B\x06", PIV_OBJECT_TYPE_PUBKEY},
+			"2.16.840.1.101.3.7.2.9999.110", 2, {0x8B, 0x06}, {0x8B, 0x06}, PIV_OBJECT_TYPE_PUBKEY},
 	{ PIV_OBJ_8C06, "Pub 8C key ",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.9999.111", 2, "\x8C\x06", "\x8C\x06", PIV_OBJECT_TYPE_PUBKEY},
+			"2.16.840.1.101.3.7.2.9999.111", 2, {0x8C, 0x06}, {0x8C, 0x06}, PIV_OBJECT_TYPE_PUBKEY},
 	{ PIV_OBJ_8D06, "Pub 8D key ",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.9999.112", 2, "\x8D\x06", "\x8D\x06", PIV_OBJECT_TYPE_PUBKEY},
+			"2.16.840.1.101.3.7.2.9999.112", 2, {0x8D, 0x06}, {0x8D, 0x06}, PIV_OBJECT_TYPE_PUBKEY},
 	{ PIV_OBJ_8E06, "Pub 8E key ",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.9999.113", 2, "\x8E\x06", "\x8E\x06", PIV_OBJECT_TYPE_PUBKEY},
+			"2.16.840.1.101.3.7.2.9999.113", 2, {0x8E, 0x06}, {0x8E, 0x06}, PIV_OBJECT_TYPE_PUBKEY},
 	{ PIV_OBJ_8F06, "Pub 8F key ",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.9999.114", 2, "\x8F\x06", "\x8F\x06", PIV_OBJECT_TYPE_PUBKEY},
+			"2.16.840.1.101.3.7.2.9999.114", 2, {0x8F, 0x06}, {0x8F, 0x06}, PIV_OBJECT_TYPE_PUBKEY},
 	{ PIV_OBJ_9006, "Pub 90 key ",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.9999.115", 2, "\x90\x06", "\x90\x06", PIV_OBJECT_TYPE_PUBKEY},
+			"2.16.840.1.101.3.7.2.9999.115", 2, {0x90, 0x06}, {0x90, 0x06}, PIV_OBJECT_TYPE_PUBKEY},
 	{ PIV_OBJ_9106, "Pub 91 key ",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.9999.116", 2, "\x91\x06", "\x91\x06", PIV_OBJECT_TYPE_PUBKEY},
+			"2.16.840.1.101.3.7.2.9999.116", 2, {0x91, 0x06}, {0x91, 0x06}, PIV_OBJECT_TYPE_PUBKEY},
 	{ PIV_OBJ_9206, "Pub 92 key ",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.9999.117", 2, "\x92\x06", "\x92\x06", PIV_OBJECT_TYPE_PUBKEY},
+			"2.16.840.1.101.3.7.2.9999.117", 2, {0x92, 0x06}, {0x92, 0x06}, PIV_OBJECT_TYPE_PUBKEY},
 	{ PIV_OBJ_9306, "Pub 93 key ",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.9999.118", 2, "\x93\x06", "\x93\x06", PIV_OBJECT_TYPE_PUBKEY},
+			"2.16.840.1.101.3.7.2.9999.118", 2, {0x93, 0x06}, {0x93, 0x06}, PIV_OBJECT_TYPE_PUBKEY},
 	{ PIV_OBJ_9406, "Pub 94 key ",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.9999.119", 2, "\x94\x06", "\x94\x06", PIV_OBJECT_TYPE_PUBKEY},
+			"2.16.840.1.101.3.7.2.9999.119", 2, {0x94, 0x06}, {0x94, 0x06}, PIV_OBJECT_TYPE_PUBKEY},
 	{ PIV_OBJ_9506, "Pub 95 key ",
 			SC_ASN1_APP | 0x13,
-			"2.16.840.1.101.3.7.2.9999.120", 2, "\x95\x06", "\x95\x06", PIV_OBJECT_TYPE_PUBKEY},
+			"2.16.840.1.101.3.7.2.9999.120", 2, {0x95, 0x06}, {0x95, 0x06}, PIV_OBJECT_TYPE_PUBKEY},
 			/*
 			 * "Secure Messaging Certificate Signer" is just a certificate.
 			 * No pub or private key on the card.
@@ -2720,12 +2725,21 @@ static int piv_generate_key(sc_card_t *card,
 		case 0x05: keydata->key_bits = 3072; break;
 		case 0x06: keydata->key_bits = 1024; break;
 		case 0x07: keydata->key_bits = 2048; break;
+		case 0x16: /* Yubico 5.7 support for 4096 */
+			keydata->key_bits = 4096;
+			break;
 		case 0x11: keydata->key_bits = 0;
-			keydata->ecparam = 0; /* we only support prime256v1 for 11 */
-			keydata->ecparam_len =0;
+			keydata->ecparam = 0; /* we only support prime256v1 */
+			keydata->ecparam_len = 0;
 			break;
 		case 0x14: keydata->key_bits = 0;
 			keydata->ecparam = 0; /* we only support secp384r1 */
+			keydata->ecparam_len = 0;
+			break;
+		case 0xE0: /* Yubico 5.7 support for EDDSA 25519 */
+		case 0xE1: /* Yubico 5.7 support for XEDDSA 25519 */
+			keydata->key_bits = 0;
+			keydata->ecparam = 0;
 			keydata->ecparam_len = 0;
 			break;
 		default:
@@ -2759,7 +2773,7 @@ static int piv_generate_key(sc_card_t *card,
 			goto err;
 		}
 
-		/* if RSA vs EC */
+		/* if RSA vs EC, ED25519 or X25519 */
 		if (keydata->key_bits > 0 ) {
 			tag = sc_asn1_find_tag(card->ctx, cp, in_len, 0x82, &taglen);
 			if (tag != NULL && taglen <= 4) {
@@ -2767,7 +2781,11 @@ static int piv_generate_key(sc_card_t *card,
 				if (keydata->exponent == NULL)
 					LOG_FUNC_RETURN(card->ctx, SC_ERROR_OUT_OF_MEMORY);
 				keydata->exponent_len = taglen;
-				memcpy (keydata->exponent, tag, taglen);
+				memcpy(keydata->exponent, tag, taglen);
+			} else {
+				sc_log(card->ctx, "Tag 0x82 not found");
+				r = SC_ERROR_UNKNOWN_DATA_RECEIVED;
+				goto err;
 			}
 
 			tag = sc_asn1_find_tag(card->ctx, cp, in_len, 0x81, &taglen);
@@ -2778,26 +2796,44 @@ static int piv_generate_key(sc_card_t *card,
 					LOG_FUNC_RETURN(card->ctx, SC_ERROR_OUT_OF_MEMORY);
 				}
 				keydata->pubkey_len = taglen;
-				memcpy (keydata->pubkey, tag, taglen);
+				memcpy(keydata->pubkey, tag, taglen);
+			} else {
+				sc_log(card->ctx, "Tag 0x81 not found");
+				r = SC_ERROR_UNKNOWN_DATA_RECEIVED;
+				goto err;
 			}
-		}
-		else { /* must be EC */
+		} else { /* must be EC, ED25519 or X25519 */
 			tag = sc_asn1_find_tag(card->ctx, cp, in_len, 0x86, &taglen);
 			if (tag != NULL && taglen > 0) {
 				keydata->ecpoint = malloc(taglen);
 				if (keydata->ecpoint == NULL)
 					LOG_FUNC_RETURN(card->ctx, SC_ERROR_OUT_OF_MEMORY);
 				keydata->ecpoint_len = taglen;
-				memcpy (keydata->ecpoint, tag, taglen);
+				memcpy(keydata->ecpoint, tag, taglen);
+			} else {
+				sc_log(card->ctx, "Tag 0x86 not found");
+				r = SC_ERROR_UNKNOWN_DATA_RECEIVED;
+				goto err;
 			}
 		}
 
-		/* TODO: -DEE Could add key to cache so could use engine to generate key,
-		 * and sign req in single operation */
+		/* Could add key to cache so could use engine to generate key,
+		 * and sign req in single operation or write temporary selfsigned
+		 * certificate with new public key
+		 */
 		r = 0;
 	}
 
 err:
+	if (r < 0) {
+		free(keydata->exponent);
+		keydata->exponent = NULL;
+		free(keydata->pubkey);
+		keydata->pubkey = NULL;
+		free(keydata->ecpoint);
+		keydata->ecpoint = NULL;
+	}
+
 	LOG_FUNC_RETURN(card->ctx, r);
 }
 
@@ -4512,6 +4548,12 @@ piv_set_security_env(sc_card_t *card, const sc_security_env_t *env, int se_num)
 			}
 		} else
 			r = SC_ERROR_NO_CARD_SUPPORT;
+	} else if (env->algorithm == SC_ALGORITHM_EDDSA) {
+		priv->alg_id = 0xE0;
+		priv->key_size = 255;
+	} else if (env->algorithm == SC_ALGORITHM_XEDDSA) {
+		priv->alg_id = 0xE1;
+		priv->key_size = 255;
 	} else
 		r = SC_ERROR_NO_CARD_SUPPORT;
 	priv->key_ref = env->key_ref[0];
@@ -4541,7 +4583,7 @@ static int piv_validate_general_authentication(sc_card_t *card,
 	unsigned int cla, tag;
 	unsigned int real_alg_id, op_tag;
 
-	u8 sbuf[4096]; /* needs work. for 3072 keys, needs 384+10 or so */
+	u8 sbuf[4096]; /* needs work. for 4096 needs 512+10 or so */
 	size_t sbuflen = sizeof(sbuf);
 	u8 rbuf[4096];
 
@@ -4559,8 +4601,7 @@ static int piv_validate_general_authentication(sc_card_t *card,
 	    (r = sc_asn1_put_tag(0x82, NULL, 0, p, sbuflen - (p - sbuf), &p)) != SC_SUCCESS) {
 		LOG_FUNC_RETURN(card->ctx, r);
 	}
-	if (priv->operation == SC_SEC_OPERATION_DERIVE
-			&& priv->algorithm == SC_ALGORITHM_EC) {
+	if (priv->operation == SC_SEC_OPERATION_DERIVE && (priv->algorithm == SC_ALGORITHM_EC || priv->algorithm == SC_ALGORITHM_XEDDSA)) {
 		op_tag = 0x85;
 	} else {
 		op_tag = 0x81;
@@ -4583,11 +4624,14 @@ static int piv_validate_general_authentication(sc_card_t *card,
 			case 128: real_alg_id = 0x06; break;
 			case 256: real_alg_id = 0x07; break;
 			case 384: real_alg_id = 0x05; break;
+			case 512:
+				real_alg_id = 0x16;
+				break;
 			default:
 				SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_VERBOSE, SC_ERROR_NO_CARD_SUPPORT);
 		}
 	}
-	/* EC alg_id was already set */
+	/* EC and ED alg_id was already set */
 
 	r = piv_general_io(card, 0x87, real_alg_id, priv->key_ref,
 			sbuf, p - sbuf, rbuf, sizeof rbuf);
@@ -4649,6 +4693,18 @@ piv_compute_signature(sc_card_t *card, const u8 * data, size_t datalen,
 			goto err;
 
 		r = sc_asn1_decode_ecdsa_signature(card->ctx, rbuf, r, nLen, &out, outlen);
+		/* Yubikey 5.7.x supports ED25519 */
+	} else if (priv->alg_id == 0xE0) {
+		nLen = BYTES4BITS(priv->key_size);
+		if (outlen < nLen) {
+			sc_log(card->ctx,
+					" output too small for ED signature %" SC_FORMAT_LEN_SIZE_T "u < %" SC_FORMAT_LEN_SIZE_T "u",
+					outlen, nLen);
+			r = SC_ERROR_INVALID_DATA;
+			goto err;
+		}
+		r = piv_validate_general_authentication(card, data, datalen, out, outlen);
+
 	} else { /* RSA is all set */
 		r = piv_validate_general_authentication(card, data, datalen, out, outlen);
 	}
@@ -5500,7 +5556,7 @@ static int piv_match_card_continued(sc_card_t *card)
 			apdu.resplen = sizeof(yubico_version_buf);
 			apdu.le = apdu.resplen;
 			r2 = sc_transmit_apdu(card, &apdu); /* on error yubico_version == 0 */
-			if (r2 >= 3) {
+			if (apdu.resplen == 3) {
 				priv->yubico_version = (yubico_version_buf[0]<<16) | (yubico_version_buf[1] <<8) | yubico_version_buf[2];
 				sc_log(card->ctx, "Yubico card->type=%d, r=0x%08x version=0x%08x", card->type, r, priv->yubico_version);
 			}
@@ -5615,6 +5671,9 @@ static int piv_match_card_continued(sc_card_t *card)
 				| CI_LEAKS_FILE_NOT_FOUND;
 			if (priv->yubico_version  < 0x00040302)
 				priv->card_issues |= CI_VERIFY_LC0_FAIL;
+			/* TODO may need to relocate when I get card to test */
+			if (priv->yubico_version >= 0x00050700)
+				priv->card_issues |= CI_RSA_4096 | CI_25519;
 			break;
 
 		case SC_CARD_TYPE_PIV_II_GI_DE:
@@ -5698,6 +5757,8 @@ static int piv_init(sc_card_t *card)
 	int r = 0;
 	piv_private_data_t * priv = PIV_DATA(card);
 	unsigned long flags;
+	unsigned long flags_eddsa;
+	unsigned long flags_xeddsa;
 	unsigned long ext_flags;
 
 	SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
@@ -5746,15 +5807,28 @@ static int piv_init(sc_card_t *card)
 	_sc_card_add_rsa_alg(card, 1024, flags, 0); /* mandatory */
 	_sc_card_add_rsa_alg(card, 2048, flags, 0); /* optional */
 	_sc_card_add_rsa_alg(card, 3072, flags, 0); /* optional */
+	if (priv->card_issues & CI_RSA_4096)
+		_sc_card_add_rsa_alg(card, 4096, flags, 0); /* some Yubikeys support this */
 
 	if (!(priv->card_issues & CI_NO_EC)) {
 		int i;
 		flags = SC_ALGORITHM_ECDSA_RAW | SC_ALGORITHM_ECDH_CDH_RAW | SC_ALGORITHM_ECDSA_HASH_NONE;
 		ext_flags = SC_ALGORITHM_EXT_EC_NAMEDCURVE | SC_ALGORITHM_EXT_EC_UNCOMPRESES;
+		flags_eddsa = SC_ALGORITHM_EDDSA_RAW;
+		flags_xeddsa = SC_ALGORITHM_XEDDSA_RAW;
 
 		for (i = 0; ec_curves[i].oid.value[0] >= 0; i++) {
-			if (!(priv->card_issues & CI_NO_EC384 && ec_curves[i].size == 384))
-				_sc_card_add_ec_alg(card, ec_curves[i].size, flags, ext_flags, &ec_curves[i].oid);
+			if (ec_curves[i].key_type == SC_ALGORITHM_EC) {
+				if (!(priv->card_issues & CI_NO_EC384 && ec_curves[i].size == 384))
+					_sc_card_add_ec_alg(card, ec_curves[i].size, flags, ext_flags, &ec_curves[i].oid);
+
+			} else if (priv->card_issues & CI_25519) {
+				if (ec_curves[i].key_type == SC_ALGORITHM_EDDSA) {
+					_sc_card_add_eddsa_alg(card, ec_curves[i].size, flags_eddsa, ext_flags, &ec_curves[i].oid);
+				} else if (ec_curves[i].key_type == SC_ALGORITHM_XEDDSA) {
+					_sc_card_add_xeddsa_alg(card, ec_curves[i].size, flags_xeddsa, ext_flags, &ec_curves[i].oid);
+				}
+			}
 		}
 	}
 

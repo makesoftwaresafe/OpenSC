@@ -211,6 +211,7 @@ init_spy(void)
 	pkcs11_spy_3_0 = allocate_function_list(1);
 	if (pkcs11_spy_3_0 == NULL) {
 		free(pkcs11_spy);
+		pkcs11_spy = NULL;
 		return CKR_HOST_MEMORY;
 	}
 
@@ -295,6 +296,9 @@ init_spy(void)
 	if (module == NULL) {
 		fprintf(spy_output, "Error: no module specified. Please set PKCS11SPY environment.\n");
 		free(pkcs11_spy);
+		pkcs11_spy = NULL;
+		free(pkcs11_spy_3_0);
+		pkcs11_spy_3_0 = NULL;
 		return CKR_DEVICE_ERROR;
 	}
 	modhandle = C_LoadModule(module, &po_v2);
@@ -305,6 +309,7 @@ init_spy(void)
 	else {
 		po = NULL;
 		free(pkcs11_spy);
+		free(pkcs11_spy_3_0);
 		rv = CKR_GENERAL_ERROR;
 	}
 
@@ -1731,28 +1736,34 @@ C_GetInterface(CK_UTF8CHAR_PTR pInterfaceName, CK_VERSION_PTR pVersion,
 	fprintf(spy_output, "[in] flags = %s\n",
 		(flags & CKF_INTERFACE_FORK_SAFE ? "CKF_INTERFACE_FORK_SAFE" : ""));
 	if (po->version.major >= 3) {
+		CK_VERSION in_version = {0, 0};
+		CK_VERSION_PTR fakeVersion = NULL;
 		CK_INTERFACE_PTR rInterface = NULL;
+
+		/* make a copy of the in parameter to avoid modifying it directly */
+		if (pVersion) {
+			in_version = *pVersion;
+			fakeVersion = &in_version;
+		}
 
 		/* We can not assume the version we told the caller matches the version in the underlying
 		 * pkcs11 module so map it back to the known ones */
 		if ((pInterfaceName == NULL || strcmp((char *)pInterfaceName, "PKCS 11") == 0) && pVersion) {
-			CK_VERSION in_version;
 			for (unsigned long i = 0; i < num_orig_interfaces; i++) {
 				CK_VERSION *v = (CK_VERSION *)orig_interfaces[i].pFunctionList;
 				/* We found the same major version. Copy the minor and call it a day */
 				if (v->major == pVersion->major) {
 					in_version.major = v->major;
 					in_version.minor = v->minor;
-					pVersion = &in_version;
-					fprintf(spy_output, "[in] pVersion = %d.%d (faked)\n",
-							pVersion->major, pVersion->minor);
+					fprintf(spy_output, "[in] fakeVersion = %d.%d (faked pVersion)\n",
+							in_version.major, in_version.minor);
 					break;
 				}
 			}
 			/* If not found, see what we will get */
 		}
 
-		rv = po->C_GetInterface(pInterfaceName, pVersion, &rInterface, flags);
+		rv = po->C_GetInterface(pInterfaceName, fakeVersion, &rInterface, flags);
 		if (rv == CKR_OK && rInterface != NULL) {
 			*ppInterface = &spy_interface;
 			spy_interface_function_list(rInterface, ppInterface);
